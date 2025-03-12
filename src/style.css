@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Темная тема */
+.dark {
+  @apply bg-darkBackground text-darkText; /* Примените ваши собственные стили */
+}
+
+/* Пример дополнительных стилей для темной темы */
+.dark .bg-white {
+  @apply bg-gray-800; /* Установите фон для элементов с белым фоном */
+}
+.dark .text-gray-900 {
+  @apply text-gray-300; /* Установите текст для темной темы */
+}

@@ -1,0 +1,71 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": "auth != null",
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid === $uid",
+        "emailVerified": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+    "topics": {
+      ".read": true,
+      ".write": "auth != null",
+      "$topicId": {
+        ".validate": "newData.hasChildren(['title', 'content', 'authorId', 'createdAt'])",
+        "replies": {
+          ".read": true,
+          ".write": "auth != null"
+        },
+        "comments": {
+          ".read": true,
+          ".write": "auth != null",
+          "$commentId": {
+            "replyCount": {
+              ".write": "auth != null"
+            }
+          }
+        }
+      }
+    },
+    "categories": {
+      ".read": true,
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val().toLowerCase() === 'admin' || root.child('users').child(auth.uid).child('role').val().toLowerCase() === 'superuser')",
+      "$categoryId": {
+        ".validate": "newData.hasChildren(['name', 'description'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "description": {
+          ".validate": "newData.isString()"
+        },
+        "type": {
+          ".validate": "newData.isString()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "createdBy": {
+          ".validate": "newData.isString()"
+        },
+        "updatedBy": {
+          ".validate": "newData.isString()"
+        }
+      }
+    },
+    "test": {
+      ".read": true,
+      ".write": true
+    },
+    "posts": {
+      ".read": true,
+      ".write": "auth != null"
+    }
+  }
+}

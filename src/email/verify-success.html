@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подтверждение email</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 1rem;
+        }
+        .success-icon {
+            animation: scale 0.5s ease-in-out;
+        }
+        .error-icon {
+            animation: scale 0.5s ease-in-out;
+            color: #ef4444;
+        }
+        @keyframes scale {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+        <div class="flex flex-col items-center">
+            <!-- Success Icon -->
+            <div id="successIcon" class="success-icon w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6" style="display: none;">
+                <svg class="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+
+            <!-- Error Icon -->
+            <div id="errorIcon" class="error-icon w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6" style="display: none;">
+                <svg class="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </div>
+
+            <!-- Loading Icon -->
+            <div id="loadingIcon" class="w-20 h-20 flex items-center justify-center mb-6">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+
+            <!-- Content -->
+            <h1 id="statusMessage" class="text-2xl font-semibold text-gray-800 mb-2 text-center">
+                Подтверждение email
+            </h1>
+
+            <p id="statusDescription" class="text-gray-600 text-center mb-8">
+                Проверяем статус подтверждения...
+            </p>
+
+            <!-- Login Button -->
+            <a href="http://localhost:5174/login" 
+               id="loginButton"
+               class="hidden w-full bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium text-center transform transition duration-200 hover:bg-indigo-700 hover:scale-105">
+                Войти в систему
+            </a>
+
+            <!-- Try Again Button -->
+            <button id="tryAgainButton"
+                    class="hidden mt-4 w-full bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-medium text-center transform transition duration-200 hover:bg-gray-300 hover:scale-105">
+                Попробовать снова
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getAuth, applyActionCode } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-vJAy9Adce0C4ixxZPsuEdJLcmxJMB6k",
+            authDomain: "forum-a36e8.firebaseapp.com",
+            databaseURL: "https://forum-a36e8-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "forum-a36e8",
+            storageBucket: "forum-a36e8.firebasestorage.app",
+            messagingSenderId: "783823450857",
+            appId: "1:783823450857:web:0984ea46bb8d195c943678",
+            measurementId: "G-99VV2G0ZZ7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const statusMessage = document.getElementById('statusMessage');
+        const statusDescription = document.getElementById('statusDescription');
+        const loginButton = document.getElementById('loginButton');
+        const tryAgainButton = document.getElementById('tryAgainButton');
+        const successIcon = document.getElementById('successIcon');
+        const errorIcon = document.getElementById('errorIcon');
+        const loadingIcon = document.getElementById('loadingIcon');
+
+        function showLoading() {
+            loadingIcon.style.display = 'flex';
+            successIcon.style.display = 'none';
+            errorIcon.style.display = 'none';
+            loginButton.classList.add('hidden');
+            tryAgainButton.classList.add('hidden');
+        }
+
+        function showSuccess() {
+            loadingIcon.style.display = 'none';
+            successIcon.style.display = 'flex';
+            errorIcon.style.display = 'none';
+            loginButton.classList.remove('hidden');
+            tryAgainButton.classList.add('hidden');
+        }
+
+        function showError() {
+            loadingIcon.style.display = 'none';
+            successIcon.style.display = 'none';
+            errorIcon.style.display = 'flex';
+            loginButton.classList.remove('hidden');
+            tryAgainButton.classList.remove('hidden');
+        }
+
+        async function handleVerification() {
+            showLoading();
+
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const mode = urlParams.get('mode');
+                const oobCode = urlParams.get('oobCode');
+
+                console.log('Verification parameters:', { mode, oobCode });
+
+                if (!mode || !oobCode) {
+                    throw new Error('missing_parameters');
+                }
+
+                if (mode !== 'verifyEmail') {
+                    throw new Error('invalid_mode');
+                }
+
+                // Применяем код подтверждения
+                await applyActionCode(auth, oobCode);
+                
+                // Показываем успешное подтверждение
+                showSuccess();
+                statusMessage.textContent = 'Email подтверждён!';
+                statusDescription.textContent = 'Теперь вы можете войти в систему и пользоваться всеми функциями форума.';
+
+                // Автоматическое перенаправление после успешной верификации
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:5174/login';
+                }, 2000);
+
+                // Проверяем статус пользователя
+                const user = auth.currentUser;
+                if (user) {
+                    await user.reload();
+                    console.log('Verification status:', user.emailVerified);
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                
+                showError();
+                statusMessage.textContent = 'Ошибка подтверждения';
+
+                // Показываем специфичное сообщение об ошибке
+                switch(error.code || error.message) {
+                    case 'auth/invalid-action-code':
+                    case 'invalid_mode':
+                        statusDescription.textContent = 'Неверная ссылка подтверждения. Пожалуйста, используйте ссылку из письма.';
+                        break;
+                    case 'auth/expired-action-code':
+                        statusDescription.textContent = 'Срок действия ссылки истек. Пожалуйста, запросите новое письмо для подтверждения.';
+                        break;
+                    case 'missing_parameters':
+                        statusDescription.textContent = 'Отсутствуют необходимые параметры в ссылке. Пожалуйста, используйте ссылку из письма.';
+                        break;
+                    default:
+                        statusDescription.textContent = 'Произошла ошибка при подтверждении email. Возможно, ссылка устарела или уже была использована.';
+                }
+
+                // Добавляем задержку перед перенаправлением при ошибке
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:5174/login';
+                }, 3000);
+            }
+        }
+
+        // Обработчик для кнопки "Попробовать снова"
+        tryAgainButton.addEventListener('click', handleVerification);
+
+        // Запускаем проверку при загрузке страницы
+        window.addEventListener('load', handleVerification);
+    </script>
+</body>
+</html>
