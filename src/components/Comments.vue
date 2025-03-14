@@ -20,11 +20,24 @@
               <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(comment.createdAt) }}</span>
             </div>
 
-            <p class="mt-2 text-gray-700 dark:text-gray-200">{{ comment.content }}</p>
+            <p class="mt-2 text-gray-700 dark:text-gray-200">{{ comment.content || t('noContent') }}</p>
 
-            <!-- Отображение изображения, если оно есть -->
-            <div v-if="comment.image" class="mt-2">
-              <img :src="comment.image" alt="Комментарий изображение" class="max-w-full h-auto rounded-lg shadow-md" />
+            <!-- Отображение изображения -->
+            <div v-if="isValidUrl(comment.image)" class="mt-2">
+              <img :src="comment.image" alt="Изображение комментария" class="max-w-full h-auto rounded-lg shadow-md" @error="handleImageError" @load="handleImageLoad" />
+              <p class="text-xs text-gray-500 dark:text-gray-400">Изображение загружено</p>
+            </div>
+            <div v-else-if="comment.image" class="mt-2 text-xs text-red-500 dark:text-red-400">
+              {{ t('invalidImageUrl') }}
+            </div>
+
+            <!-- Отображение видео -->
+            <div v-if="isValidUrl(comment.video)" class="mt-2">
+              <video :src="comment.video" controls class="max-w-full h-auto rounded-lg shadow-md" @error="handleVideoError" @loadeddata="handleVideoLoad"></video>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Видео загружено</p>
+            </div>
+            <div v-else-if="comment.video" class="mt-2 text-xs text-red-500 dark:text-red-400">
+              {{ t('invalidVideoUrl') }}
             </div>
 
             <!-- Кнопка лайка и количество лайков -->
@@ -53,7 +66,6 @@ import { computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
 
-// Пропс для получения postId
 const props = defineProps({
   postId: {
     type: [String, Number],
@@ -67,22 +79,26 @@ const store = useStore();
 const isLoading = computed(() => store.getters['comments/isLoading']);
 const comments = computed(() => store.getters['comments/getComments'] || []);
 
-// Сортировка комментариев по количеству лайков (от большего к меньшему)
 const sortedComments = computed(() => {
+  console.log('Comments.vue - Сортировка комментариев:', comments.value);
   return [...comments.value].sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
 });
 
-// Получение текущего пользователя из localStorage
-const currentUserId = computed(() => localStorage.getItem('userId') || 'default');
+const currentUserId = computed(() => {
+  const userId = localStorage.getItem('userId') || 'default';
+  console.log('Comments.vue - Текущий пользователь:', userId);
+  return userId;
+});
 
-// Проверка, лайкнул ли текущий пользователь комментарий
 const isLikedByUser = (commentId) => {
   const comment = comments.value.find(c => c.id === commentId);
-  return comment?.likes?.[currentUserId.value] || false;
+  const liked = comment?.likes?.[currentUserId.value] || false;
+  console.log('Comments.vue - Проверка лайка для комментария', commentId, ':', liked);
+  return liked;
 };
 
-// Переключение лайка
 const toggleLike = async (commentId) => {
+  console.log('Comments.vue - Переключение лайка для комментария:', commentId);
   try {
     const liked = isLikedByUser(commentId);
     await store.dispatch('comments/toggleCommentLike', { 
@@ -91,21 +107,66 @@ const toggleLike = async (commentId) => {
       userId: currentUserId.value, 
       liked: !liked 
     });
+    console.log('Comments.vue - Лайк успешно обновлён');
   } catch (error) {
-    console.error('Ошибка при переключении лайка:', error);
+    console.error('Comments.vue - Ошибка при переключении лайка:', error);
   }
 };
 
 onMounted(() => {
   if (props.postId) {
+    console.log('Comments.vue - Загрузка комментариев для поста:', props.postId);
     store.dispatch('comments/fetchComments', props.postId);
   } else {
-    console.error('postId не определен! Убедитесь, что пропс postId передан в компонент.');
+    console.error('Comments.vue - postId не определён!');
   }
 });
 
-const handleAvatarError = (event) => event.target.src = '/image/empty_avatar.png';
-const formatDate = (timestamp) => timestamp ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp)) : '';
+// Проверка валидности URL
+const isValidUrl = (url) => {
+  if (!url || typeof url !== 'string') {
+    console.warn('Comments.vue - URL невалиден:', url);
+    return false;
+  }
+  try {
+    new URL(url);
+    console.log('Comments.vue - URL валиден:', url);
+    return true;
+  } catch (e) {
+    console.warn('Comments.vue - URL невалиден:', url);
+    return false;
+  }
+};
+
+// Обработчики ошибок и событий
+const handleAvatarError = (event) => {
+  console.error('Comments.vue - Ошибка загрузки аватара');
+  event.target.src = '/image/empty_avatar.png';
+};
+
+const handleImageError = (event) => {
+  console.error('Comments.vue - Ошибка загрузки изображения:', event.target.src);
+  event.target.src = '/image/error-placeholder.png';
+};
+
+const handleImageLoad = (event) => {
+  console.log('Comments.vue - Изображение успешно загружено:', event.target.src);
+};
+
+const handleVideoError = (event) => {
+  console.error('Comments.vue - Ошибка загрузки видео:', event.target.src);
+  event.target.poster = '/image/error-placeholder.png';
+};
+
+const handleVideoLoad = (event) => {
+  console.log('Comments.vue - Видео успешно загружено:', event.target.src);
+};
+
+const formatDate = (timestamp) => {
+  const formatted = timestamp ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp)) : '';
+  console.log('Comments.vue - Форматирование даты:', timestamp, '->', formatted);
+  return formatted;
+};
 </script>
 
 <style scoped>

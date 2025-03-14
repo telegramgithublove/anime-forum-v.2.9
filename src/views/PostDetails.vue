@@ -20,10 +20,11 @@
           <div class="p-6 border-b border-gray-100 dark:border-gray-700">
             <div class="flex items-center space-x-6">
               <div class="flex-shrink-0 group">
-                <img :src="authorData.avatar || '/image/empty_avatar.png'"
+                <img :src="authorData.avatar"
                      :alt="authorData.name"
                      class="w-16 h-16 rounded-full ml-6 object-cover ring-4 ring-purple-500/30 group-hover:ring-purple-500/50 transition-all duration-300"
-                     @error="handleAvatarError">
+                     @error="handleAvatarError($event, 'author')"
+                     @load="handleAvatarLoad($event, 'author')">
                 <div class="mt-2 text-center">
                   <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ authorData.name }}</h3>
                   <p class="text-xs text-gray-500 dark:text-gray-400">{{ authorData.signature }}</p>
@@ -65,26 +66,6 @@
                 <video :src="video" class="w-full rounded-lg shadow-md" controls preload="metadata"></video>
               </div>
             </div>
-            <div v-if="post.audio && post.audio.length" class="mt-6 space-y-4">
-              <div v-for="(audioFile, index) in post.audio" :key="index" class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 shadow-sm">
-                <audio :src="audioFile" class="w-full" controls preload="metadata"></audio>
-              </div>
-            </div>
-            <div v-if="post.documents && post.documents.length" class="mt-6 space-y-3">
-              <div v-for="(doc, index) in post.documents" :key="index" class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-300">
-                <div class="flex items-center space-x-3">
-                  <i class="fas fa-file-alt text-xl text-purple-500"></i>
-                  <div>
-                    <span class="text-gray-900 dark:text-white font-medium">{{ doc.name || `Документ ${index + 1}` }}</span>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatFileSize(doc.size) }}</p>
-                  </div>
-                </div>
-                <button @click="downloadDocument(doc.url, doc.name)" class="flex items-center space-x-2 px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-300">
-                  <i class="fas fa-download"></i>
-                  <span class="text-sm">Скачать</span>
-                </button>
-              </div>
-            </div>
           </div>
 
           <!-- Действия с постом -->
@@ -117,10 +98,9 @@
           <div class="flex items-center space-x-3">
             <i class="fas fa-comments text-2xl text-purple-500"></i>
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Комментарии</h2>
-            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">({{ totalComments }})</span>
+            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">({{ comments.length }})</span>
           </div>
-          <Comments :post-id="postId" :current-page="currentPage" :items-per-page="itemsPerPage" />
-          <Pagination :total-items="totalComments" :items-per-page="itemsPerPage" :current-page="currentPage" @page-changed="handlePageChange" />
+          <Comments :post-id="postId" />
         </div>
 
         <!-- Форма комментария -->
@@ -130,18 +110,29 @@
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Оставить комментарий</h2>
           </div>
           <div class="flex items-start space-x-4">
-            <img :src="currentUser.avatarUrl || '/image/empty_avatar.png'" :alt="currentUser.username || 'Гость'" @error="handleAvatarError" class="w-12 h-12 rounded-full object-cover border-2 border-purple-500">
+            <img :src="userAvatar" :alt="currentUser.username || 'Гость'" @error="handleAvatarError($event, 'currentUser')" @load="handleAvatarLoad($event, 'currentUser')" class="w-12 h-12 rounded-full object-cover border-2 border-purple-500">
             <div class="flex-1 space-y-3">
               <div class="text-base font-semibold text-gray-900 dark:text-white">{{ currentUser.username || 'Гость' }}</div>
               <textarea
                 v-model="commentContent"
                 placeholder="Напишите ваш комментарий..."
                 class="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[120px] max-h-[200px] resize-none overflow-y-auto transition-all duration-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                @input="handleCommentInput"
-                @keydown="handleKeyDown"
               ></textarea>
-              <div v-if="imagePreview" class="mt-4">
-                <img :src="imagePreview" alt="Предпросмотр изображения" class="max-w-full h-auto rounded-lg shadow-md" />
+              <!-- Предпросмотр файлов -->
+              <div v-if="imagePreview || videoPreview" class="mt-4 space-y-4">
+                <div v-if="imagePreview" class="relative">
+                  <img :src="imagePreview" alt="Предпросмотр изображения" class="max-w-full h-auto rounded-lg shadow-md" />
+                  <button @click="clearImage" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+                <div v-if="videoPreview" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <p class="text-gray-700 dark:text-gray-200">{{ videoFileName }}</p>
+                  <video :src="videoPreview" controls class="w-full mt-2 rounded-lg"></video>
+                  <button @click="clearVideo" class="mt-2 text-red-500 hover:text-red-700">
+                    <i class="fas fa-times"></i> Удалить
+                  </button>
+                </div>
               </div>
 
               <div class="flex items-center justify-between">
@@ -153,10 +144,6 @@
                   <label class="relative cursor-pointer">
                     <input type="file" accept="image/*" @change="handleImageUpload" class="hidden">
                     <i class="fas fa-image text-lg text-purple-600 hover:text-purple-700 transition-all duration-300"></i>
-                  </label>
-                  <label class="relative cursor-pointer">
-                    <input type="file" accept="audio/*" @change="handleAudioUpload" class="hidden">
-                    <i class="fas fa-music text-lg text-purple-600 hover:text-purple-700 transition-all duration-300"></i>
                   </label>
                   <label class="relative cursor-pointer">
                     <input type="file" accept="video/*" @change="handleVideoUpload" class="hidden">
@@ -177,12 +164,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onBeforeUnmount } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { useToast } from 'vue-toastification';
 import Comments from '../components/Comments.vue';
-import Pagination from '../components/Pagination.vue';
 
 const store = useStore();
 const route = useRoute();
@@ -191,225 +177,288 @@ const toast = useToast();
 
 const commentContent = ref('');
 const imagePreview = ref(null);
-
+const imageFile = ref(null);
+const videoFile = ref(null);
+const videoPreview = ref(null);
 const post = ref(null);
 const comments = computed(() => store.getters['comments/getComments'] || []);
 const isLoading = ref(true);
 const postId = computed(() => route.params.id);
 
-const currentPage = computed(() => store.getters['pagination/getCurrentPage']);
-const itemsPerPage = ref(10);
-const allComments = computed(() => store.getters['comments/getComments'] || []);
-const totalComments = computed(() => allComments.value.length);
-
 const MAX_CHARS = 333;
-
 const remainingChars = computed(() => MAX_CHARS - (commentContent.value?.length || 0));
-const imageFile = ref(null);
-const audioFile = ref(null);
-const videoFile = ref(null);
+const hasAttachments = computed(() => !!imageFile.value || !!videoFile.value);
 
-const hasAttachments = computed(() => imageFile.value || audioFile.value || videoFile.value);
+const videoFileName = computed(() => videoFile.value ? videoFile.value.name : 'Видео не выбрано');
+
+const userAvatar = computed(() => {
+  const avatar = store.getters['profile/userAvatar'];
+  console.log('PostDetails.vue - [Avatar] Получение аватара пользователя из getter:', avatar);
+  if (!avatar || avatar === '') {
+    console.log('PostDetails.vue - [Avatar] Аватар отсутствует или пустой, используется запасной: /image/empty_avatar.png');
+    return '/image/empty_avatar.png';
+  }
+  console.log('PostDetails.vue - [Avatar] Аватар валиден:', avatar);
+  return avatar;
+});
 
 onMounted(async () => {
+  console.log('PostDetails.vue - [Lifecycle] Монтирование компонента, postId:', postId.value);
   try {
     isLoading.value = true;
+    console.log('PostDetails.vue - [Fetch] Начало загрузки поста:', postId.value);
     const postData = await store.dispatch('posts/fetchPostById', postId.value);
+    console.log('PostDetails.vue - [Fetch] Пост получен:', postData);
     post.value = postData || null;
+    console.log('PostDetails.vue - [Fetch] Начало загрузки комментариев для поста:', postId.value);
     await store.dispatch('comments/fetchComments', postId.value);
-    store.dispatch('pagination/setTotalItems', allComments.value.length);
+    console.log('PostDetails.vue - [Fetch] Пост и комментарии успешно загружены');
     isLoading.value = false;
   } catch (error) {
-    console.error('Error loading post or comments:', error);
+    console.error('PostDetails.vue - [Error] Ошибка загрузки поста или комментариев:', error);
     toast.error('Ошибка при загрузке данных');
     isLoading.value = false;
   }
 });
 
 const authorData = computed(() => {
+  console.log('PostDetails.vue - [Computed] Вычисление данных автора');
   if (post.value?.author) {
+    const authorAvatar = post.value.author.avatarUrl || userAvatar.value;
+    console.log('PostDetails.vue - [Computed] Данные автора поста:', {
+      name: post.value.author.username || currentUser.value.username || 'Гость',
+      avatar: authorAvatar,
+      signature: post.value.author.signature || currentUser.value.signature || 'Участник форума'
+    });
     return {
       name: post.value.author.username || currentUser.value.username || 'Гость',
-      avatar: post.value.author.avatarUrl || currentUser.value.avatarUrl || '/image/empty_avatar.png',
+      avatar: authorAvatar,
       signature: post.value.author.signature || currentUser.value.signature || 'Участник форума'
     };
   }
+  console.log('PostDetails.vue - [Computed] Автор поста отсутствует, используются данные текущего пользователя:', {
+    name: currentUser.value.username || 'Гость',
+    avatar: userAvatar.value,
+    signature: currentUser.value.signature || 'Участник форума'
+  });
   return {
     name: currentUser.value.username || 'Гость',
-    avatar: currentUser.value.avatarUrl || '/image/empty_avatar.png',
+    avatar: userAvatar.value,
     signature: currentUser.value.signature || 'Участник форума'
   };
 });
 
 const currentUser = computed(() => {
   const profile = store.state.profile?.profile || {};
+  console.log('PostDetails.vue - [Computed] Текущий пользователь:', profile);
   return {
     username: profile.username || '',
-    avatarUrl: profile.avatarUrl || '/image/empty_avatar.png',
+    avatarUrl: profile.avatarUrl || userAvatar.value,
     signature: profile.signature || 'Участник форума'
   };
 });
 
 const likesCount = computed(() => {
-  if (!post.value?.likes) return 0;
-  return Object.keys(post.value.likes).length;
+  const count = post.value?.likes ? Object.keys(post.value.likes).length : 0;
+  console.log('PostDetails.vue - [Computed] Количество лайков:', count);
+  return count;
 });
 
 const isLikedByCurrentUser = computed(() => {
   const user = store.state.auth.user;
-  if (!post.value?.likes || !user) return false;
-  return Boolean(post.value.likes[user.uid]);
+  const liked = user && post.value?.likes?.[user.uid];
+  console.log('PostDetails.vue - [Computed] Пост лайкнут текущим пользователем:', liked);
+  return liked;
 });
 
 const isFavorite = computed(() => {
   const user = store.state.auth.user;
-  if (!post.value?.favorites || !user) return false;
-  return Boolean(post.value.favorites[user.uid]);
+  const favorite = user && post.value?.favorites?.[user.uid];
+  console.log('PostDetails.vue - [Computed] Пост в избранном у текущего пользователя:', favorite);
+  return favorite;
 });
 
-const goBack = () => router.replace('/');
+const goBack = () => {
+  console.log('PostDetails.vue - [Action] Возврат на главную');
+  router.replace('/');
+};
 
 const handleLike = async () => {
+  console.log('PostDetails.vue - [Action] Обработка лайка поста');
   const user = store.state.auth.user;
   if (!user) {
+    console.warn('PostDetails.vue - [Action] Пользователь не авторизован для лайка');
     toast.warning('Пожалуйста, войдите в систему, чтобы поставить лайк');
     return;
   }
   try {
+    console.log('PostDetails.vue - [Action] Отправка действия toggleLike для поста:', post.value.id);
     const updatedPost = await store.dispatch('posts/toggleLike', post.value.id);
     post.value = updatedPost;
+    console.log('PostDetails.vue - [Action] Лайк успешно обновлён:', updatedPost);
   } catch (error) {
+    console.error('PostDetails.vue - [Error] Ошибка при обновлении лайка:', error);
     toast.error('Не удалось поставить лайк');
-    console.error('Error toggling like:', error);
   }
 };
 
 const toggleFavorite = async () => {
+  console.log('PostDetails.vue - [Action] Переключение избранного');
   const user = store.state.auth.user;
   if (!user) {
+    console.warn('PostDetails.vue - [Action] Пользователь не авторизован для избранного');
     toast.warning('Пожалуйста, войдите в систему, чтобы добавить в избранное');
     return;
   }
   try {
+    console.log('PostDetails.vue - [Action] Отправка действия toggleFavorite для поста:', post.value.id);
     const updatedPost = await store.dispatch('posts/toggleFavorite', post.value.id);
     post.value = updatedPost;
+    console.log('PostDetails.vue - [Action] Избранное успешно обновлено:', updatedPost);
     toast.success(isFavorite.value ? 'Добавлено в избранное' : 'Удалено из избранного');
   } catch (error) {
+    console.error('PostDetails.vue - [Error] Ошибка при обновлении избранного:', error);
     toast.error('Не удалось обновить избранное');
-    console.error('Error toggling favorite:', error);
   }
 };
 
 const focusComment = () => {
-  const textarea = document.querySelector('textarea');
-  if (textarea) textarea.focus();
-};
-
-const handleCommentInput = (event) => {
-  if (event.target.value.length > MAX_CHARS) {
-    commentContent.value = event.target.value.slice(0, MAX_CHARS);
-  }
-};
-
-const handleKeyDown = (event) => {
-  if (remainingChars.value <= 0 && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
-    event.preventDefault();
-  }
+  console.log('PostDetails.vue - [Action] Фокус на поле комментария');
+  document.querySelector('textarea')?.focus();
 };
 
 const handleImageUpload = (event) => {
-  imageFile.value = event.target.files[0];
-  if (imageFile.value) {
-    imagePreview.value = URL.createObjectURL(imageFile.value);
+  const file = event.target.files[0];
+  if (file) {
+    imageFile.value = file;
+    imagePreview.value = URL.createObjectURL(file);
+    console.log('PostDetails.vue - [Action] Выбрано изображение:', file.name);
+  } else {
+    console.error('PostDetails.vue - [Error] Изображение не выбрано');
   }
-};
-
-const handleAudioUpload = (event) => {
-  audioFile.value = event.target.files[0];
-  toast.info(`Выбрана музыка: ${audioFile.value.name}`);
+  event.target.value = '';
 };
 
 const handleVideoUpload = (event) => {
-  videoFile.value = event.target.files[0];
-  toast.info(`Выбрано видео: ${videoFile.value.name}`);
+  const file = event.target.files[0];
+  if (file) {
+    videoFile.value = file;
+    videoPreview.value = URL.createObjectURL(file);
+    console.log('PostDetails.vue - [Action] Выбрано видео:', file.name);
+  } else {
+    console.error('PostDetails.vue - [Error] Видео не выбрано');
+  }
+  event.target.value = '';
+};
+
+const clearImage = () => {
+  console.log('PostDetails.vue - [Action] Очистка изображения');
+  imageFile.value = null;
+  imagePreview.value = null;
+};
+
+const clearVideo = () => {
+  console.log('PostDetails.vue - [Action] Очистка видео');
+  videoFile.value = null;
+  videoPreview.value = null;
 };
 
 const submitComment = async () => {
+  console.log('PostDetails.vue - [Action] Отправка комментария');
   if (!commentContent.value.trim() && !hasAttachments.value) {
+    console.warn('PostDetails.vue - [Warning] Нет текста или вложений для комментария');
     toast.warning('Пожалуйста, введите текст комментария или прикрепите файл');
     return;
   }
   const user = store.state.auth.user;
   if (!user) {
+    console.error('PostDetails.vue - [Error] Пользователь не авторизован для отправки комментария');
     toast.error('Пожалуйста, войдите в систему');
     return;
   }
   try {
+    console.log('PostDetails.vue - [Action] Подготовка данных комментария');
     let imageUrl = null;
+    let videoUrl = null;
+
     if (imageFile.value) {
+      console.log('PostDetails.vue - [Action] Загрузка изображения:', imageFile.value.name);
       imageUrl = await store.dispatch('picture/uploadImage', { 
         file: imageFile.value, 
         type: 'comment' 
       });
+      console.log('PostDetails.vue - [Action] Изображение загружено, URL:', imageUrl);
+    }
+
+    if (videoFile.value) {
+      console.log('PostDetails.vue - [Action] Загрузка видео:', videoFile.value.name);
+      const videoResult = await store.dispatch('video/uploadVideo', videoFile.value);
+      videoUrl = videoResult.videoUrl;
+      console.log('PostDetails.vue - [Action] Видео загружено, URL:', videoUrl);
     }
 
     const commentData = {
       postId: postId.value,
       content: commentContent.value.trim() || '',
       image: imageUrl || null,
+      video: videoUrl || null,
     };
+    console.log('PostDetails.vue - [Action] Данные комментария подготовлены:', commentData);
 
     await store.dispatch('comments/addComment', commentData);
+    console.log('PostDetails.vue - [Action] Комментарий успешно отправлен');
+
     commentContent.value = '';
     imageFile.value = null;
     imagePreview.value = null;
+    videoFile.value = null;
+    videoPreview.value = null;
     toast.success('Комментарий успешно добавлен!');
   } catch (error) {
-    console.error('Error submitting comment:', error);
-    toast.error('Не удалось отправить комментарий');
+    console.error('PostDetails.vue - [Error] Ошибка отправки комментария:', error);
+    toast.error('Не удалось отправить комментарий: ' + (error.message || 'Неизвестная ошибка'));
   }
 };
 
-const handlePageChange = (page) => store.dispatch('pagination/setCurrentPage', page);
-const handleAvatarError = (event) => event.target.src = '/image/empty_avatar.png';
-const handleImageError = (event) => event.target.src = '/image/error-placeholder.png';
-
-const downloadDocument = async (url, fileName) => {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = fileName || 'document';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(downloadUrl);
-    toast.success('Документ успешно скачан');
-  } catch (error) {
-    console.error('Ошибка при скачивании:', error);
-    toast.error('Ошибка при скачивании документа');
-  }
+const handleAvatarError = (event, context) => {
+  const failedUrl = event.target.src;
+  console.error(`PostDetails.vue - [Error] Ошибка загрузки аватара (${context}):`, {
+    url: failedUrl,
+    timestamp: new Date().toISOString(),
+    reason: 'Изображение не найдено или недоступно'
+  });
+  event.target.src = '/image/empty_avatar.png';
+  console.log(`PostDetails.vue - [Action] Аватар заменён на запасной: /image/empty_avatar.png для ${context}`);
 };
 
-const formatDate = (timestamp) => timestamp ? new Date(timestamp).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
-const formatTime = (timestamp) => timestamp ? new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
-const formatFileSize = (size) => {
-  if (!size) return '';
-  const units = ['Б', 'КБ', 'МБ', 'ГБ'];
-  const index = Math.floor(Math.log(size) / Math.log(1024));
-  return `${(size / Math.pow(1024, index)).toFixed(2)} ${units[index]}`;
+const handleAvatarLoad = (event, context) => {
+  console.log(`PostDetails.vue - [Success] Аватар успешно загружен (${context}):`, event.target.src);
 };
 
-const getImageUrl = (image) => image || '';
+const handleImageError = (event) => {
+  console.error('PostDetails.vue - [Error] Ошибка загрузки изображения:', {
+    url: event.target.src,
+    timestamp: new Date().toISOString()
+  });
+  event.target.src = '/image/error-placeholder.png';
+};
 
-onBeforeUnmount(() => {
-  commentContent.value = '';
-  imageFile.value = null;
-  audioFile.value = null;
-  videoFile.value = null;
-});
+const formatDate = (timestamp) => {
+  const formatted = timestamp ? new Date(timestamp).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  console.log('PostDetails.vue - [Util] Форматирование даты:', timestamp, '->', formatted);
+  return formatted;
+};
+
+const formatTime = (timestamp) => {
+  const formatted = timestamp ? new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+  console.log('PostDetails.vue - [Util] Форматирование времени:', timestamp, '->', formatted);
+  return formatted;
+};
+
+const getImageUrl = (image) => {
+  console.log('PostDetails.vue - [Util] Получение URL изображения:', image);
+  return image || '';
+};
 </script>
 
 <style scoped>

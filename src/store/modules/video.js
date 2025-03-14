@@ -6,7 +6,7 @@ const state = {
   postVideos: {},
   uploadedVideos: [],
   uploadProgress: {},
-  baseUrl: 'http://95.164.90.115:3000' // Используем реальный IP сервера вместо localhost
+  baseUrl: 'http://95.164.90.115:3000'
 };
 
 const mutations = {
@@ -55,32 +55,34 @@ const mutations = {
 
 const actions = {
   async validateVideo({ commit }, file) {
+    console.log('video/validateVideo - Проверка файла:', file.name);
     return new Promise((resolve, reject) => {
       const allowedTypes = ['video/mp4', 'video/quicktime'];
       if (!allowedTypes.includes(file.type)) {
+        console.error('video/validateVideo - Неподдерживаемый тип:', file.type);
         reject(new Error('Поддерживаются только форматы MP4 и MOV'));
         return;
       }
 
-      const maxSize = 20 * 1024 * 1024; 
+      const maxSize = 20 * 1024 * 1024;
       if (file.size > maxSize) {
+        console.error('video/validateVideo - Слишком большой файл:', file.size);
         reject(new Error('Размер видео не должен превышать 20MB'));
         return;
       }
 
+      console.log('video/validateVideo - Файл прошёл проверку');
       resolve(file);
     });
   },
 
   async uploadVideo({ commit, state }, formDataOrFile) {
+    console.log('video/uploadVideo - Начало загрузки');
     try {
-      console.log('Начало загрузки видео');
-      
       const userId = localStorage.getItem('userId') || 'default';
       let formData;
       let file;
-  
-      // Проверяем, получили ли мы FormData или File
+
       if (formDataOrFile instanceof FormData) {
         formData = formDataOrFile;
         file = formDataOrFile.get('file');
@@ -89,93 +91,81 @@ const actions = {
         formData = new FormData();
         formData.append('file', file);
       }
-  
+
       if (!file) {
+        console.error('video/uploadVideo - Файл не найден');
         throw new Error('Файл не найден в FormData');
       }
-  
+
+      console.log('video/uploadVideo - Загружаемый файл:', file.name, 'Размер:', (file.size / 1024 / 1024).toFixed(2), 'MB');
       const uploadUrl = `${state.baseUrl}/upload`;
-      console.log('Отправка запроса на:', uploadUrl);
-      console.log('Тип файла:', file.type);
-      console.log('Размер отправляемого файла:', (file.size / 1024 / 1024).toFixed(2), 'MB');
-  
-      // Добавляем таймаут и повторные попытки
+      console.log('video/uploadVideo - URL загрузки:', uploadUrl);
+
       const response = await axios.post(uploadUrl, formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data'
-        },
-        timeout: 300000, // 5 минут таймаут для больших файлов
-        maxContentLength: Infinity, // Для больших файлов
-        maxBodyLength: Infinity, // Для больших файлов
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          console.log('video/uploadVideo - Прогресс загрузки:', progress + '%');
           commit('SET_UPLOAD_PROGRESS', { fileName: file.name, progress });
         },
-        // Повторные попытки при ошибке сети
         retry: 3,
         retryDelay: 1000
       });
-  
+
+      console.log('video/uploadVideo - Ответ сервера:', response.data);
       if (response.data && response.data.fileUrl) {
         const videoUrl = response.data.fileUrl;
-        console.log('Итоговый URL видео:', videoUrl);
-  
-        // Сохраняем URL в Firebase
+        console.log('video/uploadVideo - Итоговый URL:', videoUrl);
+
         const videosRef = databaseRef(database, `users/${userId}/videos`);
         const currentVideos = (await get(videosRef)).val() || [];
-        
+
         if (!currentVideos.includes(videoUrl)) {
           await set(videosRef, [...currentVideos, videoUrl]);
+          console.log('video/uploadVideo - Видео сохранено в Firebase');
         }
-  
+
         commit('ADD_VIDEO', videoUrl);
         return { success: true, videoUrl };
       }
-      
+
       throw new Error('Неверный формат ответа сервера: ' + JSON.stringify(response.data));
     } catch (error) {
-      console.error('Ошибка при загрузке видео:', error);
-      
-      // Улучшенная обработка ошибок
-      let errorMessage = 'Произошла ошибка при загрузке видео';
-      
-      if (error.code === 'ECONNREFUSED') {
-        errorMessage = 'Не удалось подключиться к серверу. Пожалуйста, проверьте подключение к интернету.';
-      } else if (error.code === 'ETIMEDOUT') {
-        errorMessage = 'Превышено время ожидания ответа от сервера. Попробуйте загрузить файл меньшего размера.';
-      } else if (error.response) {
-        errorMessage = `Ошибка сервера: ${error.response.status} ${error.response.data.message || ''}`;
-      }
-      
-      throw new Error(errorMessage);
+      console.error('video/uploadVideo - Ошибка загрузки:', error.message, error.response?.data);
+      throw new Error('Ошибка при загрузке видео: ' + (error.message || 'Неизвестная ошибка'));
     }
   },
 
   async uploadMultipleVideos({ dispatch }, files) {
+    console.log('video/uploadMultipleVideos - Начало загрузки нескольких видео');
     const results = await Promise.all(files.map(file => dispatch('uploadVideo', file)));
+    console.log('video/uploadMultipleVideos - Результаты:', results);
     return results.filter(result => result.success).map(result => result.videoUrl);
   },
 
   async savePostVideos({ commit }, { postId, videos }) {
+    console.log('video/savePostVideos - Сохранение видео для поста:', postId);
     try {
-      console.log('Сохранение видео для поста:', { postId, videos });
       const videosRef = databaseRef(database, `posts/${postId}/videos`);
       await set(videosRef, videos);
       commit('SET_POST_VIDEOS', { postId, videos });
+      console.log('video/savePostVideos - Успешно сохранено');
       return { success: true };
     } catch (error) {
-      console.error('Ошибка при сохранении видео:', error);
+      console.error('video/savePostVideos - Ошибка:', error);
       throw error;
     }
   },
 
   async fetchPostVideos({ commit }, postId) {
+    console.log('video/fetchPostVideos - Загрузка видео для поста:', postId);
     try {
-      console.log('video/fetchPostVideos - Загрузка видео поста:', postId);
-      
       const videosRef = databaseRef(database, `posts/${postId}/videos`);
       const snapshot = await get(videosRef);
-      
+
       if (snapshot.exists()) {
         const videos = snapshot.val();
         const processedVideos = Array.isArray(videos) ? videos : Object.values(videos);
@@ -183,22 +173,22 @@ const actions = {
         console.log('video/fetchPostVideos - Видео загружены:', processedVideos);
         return processedVideos;
       }
-      
+
+      console.log('video/fetchPostVideos - Видео не найдены');
       return [];
     } catch (error) {
-      console.error('video/fetchPostVideos - Ошибка загрузки:', error);
+      console.error('video/fetchPostVideos - Ошибка:', error);
       throw new Error('Не удалось загрузить видео поста');
     }
   },
 
   async removePostVideo({ commit, state }, { postId, videoUrl }) {
+    console.log('video/removePostVideo - Удаление видео:', videoUrl);
     try {
-      console.log('video/removePostVideo - Удаление видео:', videoUrl);
-      
       if (postId) {
         const videosRef = databaseRef(database, `posts/${postId}/videos`);
         const snapshot = await get(videosRef);
-        
+
         if (snapshot.exists()) {
           const videos = snapshot.val().filter(url => url !== videoUrl);
           await set(videosRef, videos);
@@ -209,36 +199,30 @@ const actions = {
         commit('CLEAR_UPLOADED_VIDEOS');
         newVideos.forEach(url => commit('ADD_VIDEO', url));
       }
-      
+
       console.log('video/removePostVideo - Видео удалено');
       return true;
     } catch (error) {
-      console.error('video/removePostVideo - Ошибка удаления:', error);
+      console.error('video/removePostVideo - Ошибка:', error);
       throw new Error('Не удалось удалить видео');
     }
   },
 
   clearVideos({ commit }) {
+    console.log('video/clearVideos - Очистка видео');
     commit('CLEAR_UPLOADED_VIDEOS');
   }
 };
 
 const getters = {
-  getPostVideos: (state) => (postId) => {
-    const videos = state.postVideos[postId] || [];
-    return videos;
-  },
-  getUploadedVideos: (state) => {
-    return state.uploadedVideos;
-  },
+  getPostVideos: (state) => (postId) => state.postVideos[postId] || [],
+  getUploadedVideos: (state) => state.uploadedVideos,
   getUploadProgress: (state) => (fileName) => state.uploadProgress[fileName] || 0,
   getVideoFileName: () => (url) => {
     if (!url) return '';
     try {
-      // Извлекаем имя файла из URL
       const urlParts = url.split('/');
       const fileName = urlParts[urlParts.length - 1];
-      // Декодируем URL-encoded символы
       return decodeURIComponent(fileName);
     } catch (error) {
       console.error('Ошибка при получении имени файла:', error);
